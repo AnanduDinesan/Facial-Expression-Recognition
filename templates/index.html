@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FER — Facial Emotion Recognition</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0a0a0f;
+      --surface: #12121a;
+      --card:    #1a1a26;
+      --border:  #2a2a3a;
+      --accent:  #7c6dfa;
+      --accent2: #fa6d9a;
+      --text:    #e8e8f0;
+      --muted:   #6b6b85;
+      --radius:  16px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      overflow-x: hidden;
+    }
+
+    /* Background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 48px 48px;
+      opacity: 0.3;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Glow blobs */
+    .blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(100px);
+      opacity: 0.12;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob-1 { width:500px; height:500px; background:var(--accent);  top:-150px; left:-100px; }
+    .blob-2 { width:400px; height:400px; background:var(--accent2); bottom:-100px; right:-80px; }
+
+    /* Layout */
+    .wrapper {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      padding: 0 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    header {
+      padding: 36px 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      animation: fadeDown 0.6s ease both;
+    }
+    .logo-mark {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 12px;
+      display: grid; place-items: center;
+      font-size: 22px;
+    }
+    .logo-text h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    .logo-text span {
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .badge {
+      margin-left: auto;
+      padding: 4px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.65rem;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    /* Upload zone */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 56px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.25s, background 0.25s;
+      background: var(--surface);
+      position: relative;
+      animation: fadeUp 0.6s 0.1s ease both;
+    }
+    .upload-zone:hover,
+    .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: #1a1a2e;
+    }
+    .upload-zone input[type="file"] {
+      position: absolute; inset: 0;
+      opacity: 0; cursor: pointer;
+      width: 100%; height: 100%;
+    }
+    .upload-icon { font-size:3rem; margin-bottom:16px; display:block; opacity:0.6; }
+    .upload-zone h2 {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.2rem; font-weight: 700; margin-bottom: 8px;
+    }
+    .upload-zone p { font-size:0.78rem; color:var(--muted); line-height:1.6; }
+    .upload-zone .hint {
+      display: inline-block; margin-top: 12px;
+      padding: 6px 14px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; font-size: 0.7rem;
+      color: var(--muted); letter-spacing: 0.06em;
+    }
+
+    /* Preview card */
+    .preview-card {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      animation: fadeUp 0.4s ease both;
+      margin-top: 20px;
+    }
+    .preview-card.visible { display: block; }
+
+    .preview-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.72rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .preview-header .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s infinite;
+    }
+
+    .preview-body {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+    }
+
+    .preview-img-wrap {
+      border-right: 1px solid var(--border);
+      padding: 20px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--card);
+    }
+    .preview-img-wrap img {
+      width: 160px; height: 160px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 2px solid var(--border);
+    }
+
+    /* Results */
+    .results-panel {
+      padding: 20px 24px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+
+    .top-prediction { display:flex; align-items:center; gap:14px; }
+    .top-emoji {
+      font-size: 3rem; line-height: 1;
+      animation: float 3s ease-in-out infinite;
+    }
+    .top-info h3 {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.6rem; font-weight: 800;
+      letter-spacing: -0.03em; line-height: 1;
+    }
+    .top-info .confidence { font-size:0.75rem; color:var(--muted); margin-top:4px; }
+    .top-info .confidence span { color:var(--text); font-weight:500; }
+
+    .bars-label {
+      font-size: 0.65rem; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--muted); margin-bottom: 4px;
+    }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 80px 1fr 46px;
+      align-items: center; gap: 10px; margin-bottom: 7px;
+    }
+    .bar-label { font-size:0.72rem; color:var(--muted); text-align:right; white-space:nowrap; }
+    .bar-track {
+      height: 6px; background: var(--card);
+      border-radius: 99px; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .bar-fill {
+      height: 100%; border-radius: 99px;
+      width: 0%;
+      transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .bar-pct { font-size:0.7rem; color:var(--muted); text-align:right; }
+
+    /* Loading */
+    .loading-overlay {
+      display: none;
+      position: absolute; inset: 0;
+      background: rgba(10,10,15,0.85);
+      place-items: center; z-index: 10;
+      flex-direction: column; gap: 12px;
+    }
+    .loading-overlay.active { display: flex; }
+    .spinner {
+      width:36px; height:36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .loading-text { font-size:0.72rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom:24px; right:24px;
+      background: #2a0f0f; border: 1px solid #ef4444;
+      color: #fca5a5; padding: 12px 18px;
+      border-radius: 10px; font-size: 0.78rem;
+      transform: translateY(100px); opacity: 0;
+      transition: all 0.3s ease; z-index: 100;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    /* Footer */
+    footer {
+      padding: 16px 0 24px;
+      font-size: 0.65rem; color: var(--muted);
+      letter-spacing: 0.06em; text-align: center;
+      border-top: 1px solid var(--border);
+      animation: fadeUp 0.6s 0.3s ease both;
+    }
+
+    /* Animations */
+    @keyframes fadeDown { from{opacity:0;transform:translateY(-16px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeUp   { from{opacity:0;transform:translateY(16px)}  to{opacity:1;transform:translateY(0)} }
+    @keyframes spin     { to{transform:rotate(360deg)} }
+    @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    @keyframes float    { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+    @media (max-width: 580px) {
+      .preview-body { grid-template-columns: 1fr; }
+      .preview-img-wrap { border-right:none; border-bottom:1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+
+  <div class="wrapper">
+    <header>
+      <div class="logo-mark">🧠</div>
+      <div class="logo-text">
+        <h1>FER Studio</h1>
+        <span>Facial Emotion Recognition</span>
+      </div>
+      <div class="badge">EfficientNetB0</div>
+    </header>
+
+    <main>
+
+      <!-- Upload Zone -->
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept="image/*" />
+        <span class="upload-icon">📷</span>
+        <h2>Drop a face image here</h2>
+        <p>Upload any photo containing a face<br>and the model will predict the emotion</p>
+        <span class="hint">PNG · JPG · JPEG · WEBP · max 5MB</span>
+      </div>
+
+      <!-- Preview + Results -->
+      <div class="preview-card" id="previewCard">
+        <div class="preview-header">
+          <div class="dot"></div>
+          Analysis Result
+        </div>
+        <div class="preview-body" style="position:relative">
+
+          <!-- Loading overlay -->
+          <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+            <div class="loading-text">Analyzing...</div>
+          </div>
+
+          <!-- Uploaded image -->
+          <div class="preview-img-wrap">
+            <img id="previewImg" src="" alt="Uploaded face" />
+          </div>
+
+          <!-- Prediction results -->
+          <div class="results-panel" id="resultsPanel">
+            <div class="top-prediction">
+              <div class="top-emoji" id="topEmoji">⏳</div>
+              <div class="top-info">
+                <h3 id="topEmotion">—</h3>
+                <div class="confidence">
+                  Confidence: <span id="topConfidence">—</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="bars-label">All Emotions</div>
+              <div id="barsContainer"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+
+    <footer>
+      FER2013 · EfficientNetB0 Transfer Learning · Flask + TensorFlow
+    </footer>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const fileInput      = document.getElementById('fileInput');
+    const uploadZone     = document.getElementById('uploadZone');
+    const previewCard    = document.getElementById('previewCard');
+    const previewImg     = document.getElementById('previewImg');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const topEmoji       = document.getElementById('topEmoji');
+    const topEmotion     = document.getElementById('topEmotion');
+    const topConfidence  = document.getElementById('topConfidence');
+    const barsContainer  = document.getElementById('barsContainer');
+    const toast          = document.getElementById('toast');
+
+    // ── Drag & drop ───────────────────────────────────────────
+    uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+    uploadZone.addEventListener('dragleave', ()  => uploadZone.classList.remove('drag-over'));
+    uploadZone.addEventListener('drop', e => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+
+    // ── File input change ─────────────────────────────────────
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3500);
+    }
+
+    function handleFile(file) {
+      // Show image preview instantly before server responds
+      const reader = new FileReader();
+      reader.onload = e => {
+        previewImg.src = e.target.result;
+        previewCard.classList.add('visible');
+        // Reset previous results
+        topEmoji.textContent      = '⏳';
+        topEmotion.textContent    = 'Analyzing...';
+        topEmotion.style.color    = 'var(--text)';
+        topConfidence.textContent = '—';
+        barsContainer.innerHTML   = '';
+        loadingOverlay.classList.add('active');
+        uploadAndPredict(file);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function uploadAndPredict(file) {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      fetch('/predict', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+          loadingOverlay.classList.remove('active');
+          if (data.error) { showToast('⚠️ ' + data.error); return; }
+          renderResults(data);
+        })
+        .catch(() => {
+          loadingOverlay.classList.remove('active');
+          showToast('⚠️ Server error — make sure Flask is running.');
+        });
+    }
+
+    function renderResults(data) {
+      const top = data.top;
+
+      // ── Top emotion ───────────────────────────────────────
+      topEmoji.textContent      = top.emoji;
+      topEmotion.textContent    = top.emotion;
+      topEmotion.style.color    = top.color;
+      topConfidence.textContent = top.pct + '%';
+
+      // ── All emotion bars ──────────────────────────────────
+      barsContainer.innerHTML = '';
+      data.predictions.forEach((p, i) => {
+        const row = document.createElement('div');
+        row.className = 'bar-row';
+        row.innerHTML = `
+          <div class="bar-label">${p.emoji} ${p.emotion}</div>
+          <div class="bar-track">
+            <div class="bar-fill" id="bar-${i}" style="background:${p.color}"></div>
+          </div>
+          <div class="bar-pct">${p.pct}%</div>
+        `;
+        barsContainer.appendChild(row);
+
+        // Staggered bar animation
+        setTimeout(() => {
+          document.getElementById(`bar-${i}`).style.width = p.pct + '%';
+        }, 80 + i * 60);
+      });
+    }
+  </script>
+</body>
+</html>
